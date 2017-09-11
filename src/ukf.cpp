@@ -92,6 +92,21 @@ UKF::UKF() {
 
     // the current NIS for laser
     NIS_laser_ = 0;
+
+    // initializing matrices
+    R_laser_ = MatrixXd(2, 2);
+    H_laser_ = MatrixXd(2, 5);
+
+    //measurement covariance matrix - laser
+    R_laser_ << 0.0225, 0,
+            0, 0.0225;
+    // measurement matrix
+    H_laser_ << 1, 0, 0, 0, 0,
+            0, 1, 0, 0, 0;
+
+
+
+
 }
 
 UKF::~UKF() {}
@@ -298,6 +313,22 @@ void UKF::Prediction(double delta_t) {
     std::cout<<std::endl;
 }
 
+
+
+const double PI = 3.1415926;
+void normalize_phi(double & phi)
+{
+    while(phi<-PI)
+    {
+        phi += 2*PI;
+    }
+
+    while(phi>PI)
+    {
+        phi -= 2*PI;
+    }
+}
+
 /**
  * Updates the state and the state covariance matrix using a laser measurement.
  * @param {MeasurementPackage} meas_package
@@ -312,78 +343,20 @@ void UKF::UpdateLidar(MeasurementPackage meas_package) {
   You'll also need to calculate the lidar NIS.
   */
 
-    //set measurement dimension
-    int n_z = 2;
+//    Using update function from EKF
+    VectorXd y = meas_package.raw_measurements_ - H_laser_ * x_;
+    normalize_phi(y(1));
+    MatrixXd Ht = H_laser_.transpose();
+    MatrixXd S = H_laser_ * P_ * Ht + R_laser_;
+    MatrixXd Si = S.inverse();
+    MatrixXd K =  P_ * Ht * Si;
 
-    //create matrix for sigma points in measurement space
-    MatrixXd Zsig = MatrixXd(n_z, 2 * n_aug_+ 1);
-
-    //transform sigma points into measurement space
-    for (int i = 0; i < 2 * n_aug_ + 1; ++i)
-    {
-        // measurement model
-        Zsig(0,i) = Xsig_pred_(0,i);                        //px
-        Zsig(1,i) = Xsig_pred_(1,i);                        //py
-    }
-
-    //mean predicted measurement
-    VectorXd z_pred = VectorXd(n_z);
-    z_pred.fill(0.0);
-    for (int i=0; i < 2*n_aug_+1; ++i)
-    {
-        z_pred += weights_(i) * Zsig.col(i);
-    }
-
-    //measurement covariance matrix S
-    MatrixXd S = MatrixXd(n_z,n_z);
-    S.fill(0.0);
-    for (int i = 0; i < 2 * n_aug_ + 1; ++i)
-    {
-        //residual
-        VectorXd z_diff = Zsig.col(i) - z_pred;
-        S += weights_(i) * z_diff * z_diff.transpose();
-    }
-
-    //add measurement noise covariance matrix
-    MatrixXd R = MatrixXd(n_z,n_z);
-    R <<    std_laspx_*std_laspx_, 0,
-            0, std_laspy_*std_laspy_;
-    S += R;
-
-    //create matrix for cross correlation Tc
-    MatrixXd Tc = MatrixXd(n_x_, n_z);
-
-    //calculate cross correlation matrix
-    Tc.fill(0.0);
-    for (int i = 0; i < 2 * n_aug_ + 1; ++i)
-    {
-        //residual
-        VectorXd z_diff = Zsig.col(i) - z_pred;
-        // state difference
-        VectorXd x_diff = Xsig_pred_.col(i) - x_;
-        Tc += weights_(i) * x_diff * z_diff.transpose();
-    }
-
-    //Kalman gain K;
-    MatrixXd K = Tc * S.inverse();
-
-    //residual
-    VectorXd z_diff = meas_package.raw_measurements_ - z_pred;
-
-    //update state mean and covariance matrix
-    x_ = x_+ K * z_diff;
-    P_ = P_ - K*S*K.transpose();
-
-    std::cout<<"update_lidar:"<<std::endl;
-    std::cout<<"x_= "<<std::endl;
-    std::cout<<x_<<std::endl;
-    std::cout<<"P_= "<<std::endl;
-    std::cout<<P_<<std::endl;
-    std::cout<<std::endl;
-
-    NIS_laser_ = z_diff.transpose()*S.inverse()*z_diff;
-    std::cout<<"NIS: "<<NIS_laser_<<"  Upper bound: 5.991"<<std::endl;
-    std::cout<<std::endl;
+    MatrixXd I; // Identity matrix
+    //new state
+    x_ = x_ + (K * y);
+    long x_size = x_.size();
+    I = MatrixXd::Identity(x_size, x_size);
+    P_ = (I - K * H_laser_) * P_;
 }
 
 /**
@@ -507,6 +480,6 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
     std::cout<<std::endl;
 
     NIS_radar_ = z_diff.transpose()*S.inverse()*z_diff;
-    std::cout<<"NIS: "<<NIS_radar_<<"  Upper bound: 7.815"<<std::endl;
+    std::cout<<"NIS: "<<NIS_radar_<<std::endl;
     std::cout<<std::endl;
 }

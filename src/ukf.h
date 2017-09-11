@@ -68,10 +68,14 @@ public:
   double lambda_;
 
   ///* the current NIS for radar
-    double NIS_radar_;
+  double NIS_radar_;
 
   ///* the current NIS for laser
   double NIS_laser_;
+
+  //measurement covariance matrix - laser
+  MatrixXd R_laser_;
+  MatrixXd H_laser_;
 
 
   /**
